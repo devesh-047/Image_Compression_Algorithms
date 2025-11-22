@@ -1,0 +1,17 @@
+# Image Compression Algorithms - Requirements
+# This file lists all dependencies needed to run the original algorithms and wrappers
+
+# Core numerical and scientific computing
+numpy>=1.21.0
+scipy>=1.7.0
+
+# Image processing and visualization
+matplotlib>=3.4.0
+scikit-image>=0.18.0
+
+# Testing framework
+pytest>=7.0.0
+pytest-cov>=3.0.0
+
+# Additional utilities
+Pillow>=8.3.0
