@@ -1,6 +1,54 @@
 # Image_Compression_Algorithms
 Implementation and Comparison of image compression algorithms
 
+## 🚀 Interactive Dashboard
+
+This project includes a **Streamlit dashboard** for interactive compression algorithm comparison!
+
+### Quick Start
+
+```powershell
+# 1. Navigate to project root
+cd Image_Compression_Algorithms
+
+# 2. Activate virtual environment
+.\venv\Scripts\Activate.ps1
+
+# 3. Install dashboard dependencies (one-time)
+pip install streamlit pandas
+
+# 4. Launch dashboard
+cd dashboard
+streamlit run app.py
+```
+
+The dashboard will open automatically in your browser at `http://localhost:8501`
+
+### Dashboard Features
+
+- **📁 Multi-image upload** - PNG, JPG, TIFF formats supported
+- **🔄 Real-time compression** - All 5 algorithms (Huffman, LZW, RLE, DCT, DFT)
+- **📊 Metrics with lossless detection** - Automatic PSNR=∞, SSIM=1.0 for perfect reconstruction
+- **🖼️ Visual comparison** - Side-by-side original vs compressed images
+- **📈 Trade-off analysis** - Interactive plots (CR vs PSNR, CR vs SSIM)
+- **💾 Export capabilities** - CSV download, JSON session save
+
+### Usage Example
+
+1. Upload images from `samples/kodak/` (e.g., `kodim01.png`)
+2. Select algorithms: ✅ Huffman (lossless), ✅ DCT (lossy)
+3. Adjust parameters: Huffman base=2, DCT threshold=90%
+4. Click "▶️ Run Compression"
+5. View results and metrics
+
+**Expected Results** (kodim01.png):
+- Huffman: 8:1 compression, PSNR=∞, SSIM=1.0 (lossless)
+- DCT: 1.1:1 compression, ~32 dB PSNR, ~0.85 SSIM (lossy)
+
+📖 **Full documentation**: See `dashboard/README.md` and `dashboard/QUICKSTART.md`
+
+---
+
 ## 🎉 Project Status: Converted to Uniform Python Package
 
 This repository has been **successfully converted** from Jupyter notebooks to a structured Python project while **preserving all original algorithm implementations verbatim**.
