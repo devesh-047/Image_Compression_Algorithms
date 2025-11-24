@@ -87,12 +87,18 @@ class AlgorithmRunner:
             # Color image - process per channel
             compressed_channels = []
             codebooks = []
+            total_compressed_bits = 0
             
             for i in range(3):
                 channel = img[:, :, i]
                 encoded, codebook = huffman_original.huffman_encode(channel, base=base)
                 compressed_channels.append(encoded)
                 codebooks.append(codebook)
+                
+                # Calculate actual compressed size for this channel
+                encoded_bits = sum(len(sym) for sym in encoded)
+                dict_bits = sum(32 + len(v) for v in codebook.values())  # key + value bits
+                total_compressed_bits += encoded_bits + dict_bits
             
             # Save compressed data
             compressed_path = output_dir / "compressed.pkl"
@@ -113,9 +119,17 @@ class AlgorithmRunner:
             
             reconstructed = np.stack(reconstructed_channels, axis=2)
             
+            # Store actual compressed size in bytes
+            compressed_size_bytes = total_compressed_bits // 8
+            
         else:
-            # Grayscale
+            # Grayscale image
             encoded, codebook = huffman_original.huffman_encode(img, base=base)
+            
+            # Calculate actual compressed size
+            encoded_bits = sum(len(sym) for sym in encoded)
+            dict_bits = sum(32 + len(v) for v in codebook.values())  # key + value bits
+            compressed_size_bytes = (encoded_bits + dict_bits) // 8
             
             compressed_path = output_dir / "compressed.pkl"
             with open(compressed_path, 'wb') as f:
@@ -131,7 +145,8 @@ class AlgorithmRunner:
         return {
             'compressed_path': compressed_path,
             'reconstructed': reconstructed,
-            'params': {'base': base}
+            'params': params,
+            'compressed_size': compressed_size_bytes
         }
     
     def _run_lzw(self, img: np.ndarray, params: Dict, output_dir: Path) -> Dict:
@@ -139,11 +154,17 @@ class AlgorithmRunner:
         if len(img.shape) == 3:
             # Color image
             compressed_channels = []
+            total_compressed_bits = 0
             
             for i in range(3):
                 channel = img[:, :, i]
                 encoded = lzw_original.lzw_encode(channel.flatten())
                 compressed_channels.append(encoded)
+                
+                # Calculate compressed size: each code is 12 bits
+                total_compressed_bits += len(encoded) * 12
+            
+            compressed_size_bytes = total_compressed_bits // 8
             
             compressed_path = output_dir / "compressed.pkl"
             with open(compressed_path, 'wb') as f:
@@ -166,6 +187,9 @@ class AlgorithmRunner:
             # Grayscale
             encoded = lzw_original.lzw_encode(img.flatten())
             
+            # Calculate compressed size: each code is 12 bits
+            compressed_size_bytes = (len(encoded) * 12) // 8
+            
             compressed_path = output_dir / "compressed.pkl"
             with open(compressed_path, 'wb') as f:
                 pickle.dump({
@@ -179,7 +203,8 @@ class AlgorithmRunner:
         return {
             'compressed_path': compressed_path,
             'reconstructed': reconstructed,
-            'params': {}
+            'params': params,
+            'compressed_size': compressed_size_bytes
         }
     
     def _run_rle(self, img: np.ndarray, params: Dict, output_dir: Path) -> Dict:
@@ -187,11 +212,18 @@ class AlgorithmRunner:
         if len(img.shape) == 3:
             # Color image
             compressed_channels = []
+            total_compressed_bytes = 0
             
             for i in range(3):
                 channel = img[:, :, i]
                 encoded, shape, dtype = rle_original.rle_encode(channel)
                 compressed_channels.append((encoded, shape, dtype))
+                
+                # Calculate compressed size: run-length pairs (value, count)
+                # Each pair: 1 byte value + 2 bytes count
+                total_compressed_bytes += len(encoded) // 2 * 3
+            
+            compressed_size_bytes = total_compressed_bytes
             
             compressed_path = output_dir / "compressed.pkl"
             with open(compressed_path, 'wb') as f:
@@ -212,6 +244,10 @@ class AlgorithmRunner:
             # Grayscale
             encoded, shape, dtype = rle_original.rle_encode(img)
             
+            # Calculate compressed size: run-length pairs (value, count)
+            # Each pair: 1 byte value + 2 bytes count
+            compressed_size_bytes = len(encoded) // 2 * 3
+            
             compressed_path = output_dir / "compressed.pkl"
             with open(compressed_path, 'wb') as f:
                 pickle.dump({
@@ -225,7 +261,8 @@ class AlgorithmRunner:
         return {
             'compressed_path': compressed_path,
             'reconstructed': reconstructed,
-            'params': {}
+            'params': {},
+            'compressed_size': compressed_size_bytes
         }
     
     def _run_dct(self, img: np.ndarray, params: Dict, output_dir: Path) -> Dict:
@@ -240,6 +277,15 @@ class AlgorithmRunner:
             compressed, coeffs = dft_dct_original.dct_compression_color(img_3d, threshold_percent)
             compressed = compressed[:, :, 0]
         
+        # Calculate compressed size based on retained coefficients
+        # Count non-zero coefficients across all channels
+        if isinstance(coeffs, list):
+            total_nonzero = sum(np.count_nonzero(c) for c in coeffs)
+        else:
+            total_nonzero = np.count_nonzero(coeffs)
+        # Each coefficient is 8 bytes (float64)
+        compressed_size_bytes = total_nonzero * 8
+        
         # Save compressed data
         compressed_path = output_dir / "compressed.pkl"
         with open(compressed_path, 'wb') as f:
@@ -253,7 +299,8 @@ class AlgorithmRunner:
         return {
             'compressed_path': compressed_path,
             'reconstructed': compressed,
-            'params': {'threshold_percent': threshold_percent}
+            'params': {'threshold_percent': threshold_percent},
+            'compressed_size': compressed_size_bytes
         }
     
     def _run_dft(self, img: np.ndarray, params: Dict, output_dir: Path) -> Dict:
@@ -268,6 +315,15 @@ class AlgorithmRunner:
             compressed, coeffs = dft_dct_original.dft_compression_color(img_3d, threshold_percent)
             compressed = compressed[:, :, 0]
         
+        # Calculate compressed size based on retained coefficients
+        # Count non-zero coefficients across all channels
+        if isinstance(coeffs, list):
+            total_nonzero = sum(np.count_nonzero(c) for c in coeffs)
+        else:
+            total_nonzero = np.count_nonzero(coeffs)
+        # Each coefficient is 16 bytes (complex128)
+        compressed_size_bytes = total_nonzero * 16
+        
         # Save compressed data
         compressed_path = output_dir / "compressed.pkl"
         with open(compressed_path, 'wb') as f:
@@ -281,7 +337,8 @@ class AlgorithmRunner:
         return {
             'compressed_path': compressed_path,
             'reconstructed': compressed,
-            'params': {'threshold_percent': threshold_percent}
+            'params': {'threshold_percent': threshold_percent},
+            'compressed_size': compressed_size_bytes
         }
 
 

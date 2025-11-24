@@ -100,10 +100,12 @@ def main():
                 if uploaded_file.name not in st.session_state.uploaded_images:
                     img = Image.open(uploaded_file)
                     img_array = np.array(img)
+                    # Calculate raw image data size (uncompressed)
+                    raw_size = img_array.nbytes  # height × width × channels × bytes_per_pixel
                     st.session_state.uploaded_images[uploaded_file.name] = {
                         'pil': img,
                         'array': img_array,
-                        'size': uploaded_file.size
+                        'size': raw_size
                     }
         
         st.divider()
@@ -200,7 +202,8 @@ def main():
                         )
                         
                         # Calculate metrics
-                        compressed_size = result['compressed_path'].stat().st_size
+                        # Use actual compressed size if provided, otherwise fall back to file size
+                        compressed_size = result.get('compressed_size', result['compressed_path'].stat().st_size)
                         metrics = calculate_metrics(
                             img_array,
                             result['reconstructed'],
