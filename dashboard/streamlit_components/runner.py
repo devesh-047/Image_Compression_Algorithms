@@ -151,6 +151,8 @@ class AlgorithmRunner:
     
     def _run_lzw(self, img: np.ndarray, params: Dict, output_dir: Path) -> Dict:
         """Run LZW compression (lossless)"""
+        max_dict_size = params.get('max_dict_size', 4096)
+        
         if len(img.shape) == 3:
             # Color image
             compressed_channels = []
@@ -158,7 +160,7 @@ class AlgorithmRunner:
             
             for i in range(3):
                 channel = img[:, :, i]
-                encoded = lzw_original.lzw_encode(channel.flatten())
+                encoded = lzw_original.lzw_encode(channel.flatten(), max_dict_size=max_dict_size)
                 compressed_channels.append(encoded)
                 
                 # Calculate compressed size: each code is 12 bits
@@ -185,7 +187,7 @@ class AlgorithmRunner:
             
         else:
             # Grayscale
-            encoded = lzw_original.lzw_encode(img.flatten())
+            encoded = lzw_original.lzw_encode(img.flatten(), max_dict_size=max_dict_size)
             
             # Calculate compressed size: each code is 12 bits
             compressed_size_bytes = (len(encoded) * 12) // 8
@@ -266,25 +268,27 @@ class AlgorithmRunner:
         }
     
     def _run_dct(self, img: np.ndarray, params: Dict, output_dir: Path) -> Dict:
-        """Run DCT compression (lossy)"""
-        threshold_percent = params.get('threshold_percent', 90)
+        """Run DCT compression (lossy) - JPEG-like block quantization"""
+        # Quality scale parameter (replaces threshold_percent)
+        # Higher = more compression, lower quality
+        quality_scale = params.get('quality_scale', 5.0)
         
         if len(img.shape) == 3:
-            compressed, coeffs = dft_dct_original.dct_compression_color(img, threshold_percent)
+            compressed, coeffs = dft_dct_original.dct_compression_color(img, quality_scale)
         else:
             # Convert grayscale to 3-channel for algorithm
             img_3d = np.stack([img, img, img], axis=2)
-            compressed, coeffs = dft_dct_original.dct_compression_color(img_3d, threshold_percent)
+            compressed, coeffs = dft_dct_original.dct_compression_color(img_3d, quality_scale)
             compressed = compressed[:, :, 0]
         
-        # Calculate compressed size based on retained coefficients
-        # Count non-zero coefficients across all channels
-        if isinstance(coeffs, list):
-            total_nonzero = sum(np.count_nonzero(c) for c in coeffs)
-        else:
-            total_nonzero = np.count_nonzero(coeffs)
-        # Each coefficient is 8 bytes (float64)
-        compressed_size_bytes = total_nonzero * 8
+        # Calculate compression ratio using quantized coefficients
+        # CR = total_coeffs / non_zero_coeffs
+        total_elements = coeffs.size
+        non_zero_count = np.count_nonzero(coeffs)
+        
+        # For compatibility, set compressed_size_bytes to None
+        # Ratio will be calculated in app.py using coeffs
+        compressed_size_bytes = None
         
         # Save compressed data
         compressed_path = output_dir / "compressed.pkl"
@@ -292,37 +296,42 @@ class AlgorithmRunner:
             pickle.dump({
                 'compressed': compressed,
                 'coeffs': coeffs,
-                'threshold_percent': threshold_percent,
+                'quality_scale': quality_scale,
                 'original_shape': img.shape
             }, f)
         
         return {
             'compressed_path': compressed_path,
             'reconstructed': compressed,
-            'params': {'threshold_percent': threshold_percent},
-            'compressed_size': compressed_size_bytes
+            'params': {'quality_scale': quality_scale},
+            'compressed_size': compressed_size_bytes,
+            'coeffs': coeffs,  # Pass coeffs for compression ratio calculation
+            'algorithm_type': 'block_quantization'  # New method indicator
         }
     
     def _run_dft(self, img: np.ndarray, params: Dict, output_dir: Path) -> Dict:
-        """Run DFT compression (lossy)"""
-        threshold_percent = params.get('threshold_percent', 90)
+        """Run DFT compression (lossy) - Block quantization"""
+        # Quantization scalar parameter (replaces threshold_percent)
+        # Higher = more compression, lower quality
+        q_scalar = params.get('q_scalar', 95)
         
         if len(img.shape) == 3:
-            compressed, coeffs = dft_dct_original.dft_compression_color(img, threshold_percent)
+            compressed, coeffs = dft_dct_original.dft_compression_color(img, q_scalar)
         else:
             # Convert grayscale to 3-channel for algorithm
             img_3d = np.stack([img, img, img], axis=2)
-            compressed, coeffs = dft_dct_original.dft_compression_color(img_3d, threshold_percent)
+            compressed, coeffs = dft_dct_original.dft_compression_color(img_3d, q_scalar)
             compressed = compressed[:, :, 0]
         
-        # Calculate compressed size based on retained coefficients
-        # Count non-zero coefficients across all channels
-        if isinstance(coeffs, list):
-            total_nonzero = sum(np.count_nonzero(c) for c in coeffs)
-        else:
-            total_nonzero = np.count_nonzero(coeffs)
-        # Each coefficient is 16 bytes (complex128)
-        compressed_size_bytes = total_nonzero * 16
+        # Calculate compression ratio for complex coefficients
+        # Count non-zero real and imaginary parts separately
+        total_complex_coeffs = coeffs.size
+        total_scalar_elements = total_complex_coeffs * 2
+        non_zero_real = np.count_nonzero(np.real(coeffs))
+        non_zero_imag = np.count_nonzero(np.imag(coeffs))
+        non_zero_scalar_count = non_zero_real + non_zero_imag
+        
+        compressed_size_bytes = None
         
         # Save compressed data
         compressed_path = output_dir / "compressed.pkl"
@@ -330,15 +339,18 @@ class AlgorithmRunner:
             pickle.dump({
                 'compressed': compressed,
                 'coeffs': coeffs,
-                'threshold_percent': threshold_percent,
+                'q_scalar': q_scalar,
                 'original_shape': img.shape
             }, f)
         
         return {
             'compressed_path': compressed_path,
             'reconstructed': compressed,
-            'params': {'threshold_percent': threshold_percent},
-            'compressed_size': compressed_size_bytes
+            'params': {'q_scalar': q_scalar},
+            'compressed_size': compressed_size_bytes,
+            'coeffs': coeffs,  # Pass coeffs for compression ratio calculation
+            'algorithm_type': 'block_quantization',  # New method indicator
+            'is_complex': True  # DFT uses complex coefficients
         }
 
 
